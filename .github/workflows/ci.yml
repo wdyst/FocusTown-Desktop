@@ -41,6 +41,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # audit-check expects Cargo.lock at the repo root
+      - name: Expose lockfile at root
+        run: cp src-tauri/Cargo.lock Cargo.lock
+
       - name: Audit Rust dependencies
         uses: rustsec/audit-check@v2
         with:

@@ -49,6 +49,8 @@ jobs:
         uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # Acknowledged advisories with justifications: .cargo/audit.toml
+          ignore: RUSTSEC-2026-0194,RUSTSEC-2026-0195
 
       - name: Audit npm dependencies
         run: |

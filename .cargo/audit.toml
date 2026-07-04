@@ -1,0 +1,15 @@
+# cargo-audit configuration (used by CI's audit job and local `cargo audit`).
+#
+# Ignored advisories — each entry needs a justification and an upstream to
+# watch. Remove entries as soon as the upstream fix lands in our tree.
+[advisories]
+ignore = [
+    # RUSTSEC-2026-0194 / RUSTSEC-2026-0195: DoS-class issues (quadratic
+    # attribute checking, unbounded namespace allocation) in quick-xml
+    # 0.39.x. Pulled in transitively via plist -> tauri-utils; only used to
+    # parse trusted, locally-bundled Apple plist files, never
+    # attacker-supplied XML. No patched 0.39.x release exists; waiting for
+    # plist/tauri-utils to move to a fixed quick-xml. Revisit on tauri bumps.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+]

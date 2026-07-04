@@ -48,9 +48,15 @@
     if (!toastHost) {
       toastHost = document.createElement("div");
       toastHost.id = OVERLAY_ID + "_toasts";
-      toastHost.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);" +
+      toastHost.style.cssText = "position:fixed;inset:auto;margin:0;border:0;padding:0;background:transparent;" +
+        "overflow:visible;left:50%;bottom:24px;transform:translateX(-50%);" +
         "z-index:2147483647;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none";
       document.documentElement.appendChild(toastHost);
+      // Top layer, so toasts render above the game's own top-layer UI.
+      if (typeof toastHost.showPopover === "function") {
+        toastHost.setAttribute("popover", "manual");
+        try { toastHost.showPopover(); } catch (err) { toastHost.removeAttribute("popover"); }
+      }
     }
     var t = document.createElement("div");
     t.textContent = msg;
@@ -93,10 +99,25 @@
     }
   };
   var els = null;
+  var hostEl = null;
   var panelOpen = false;
 
   function clampZoom(z) { return Math.min(3, Math.max(0.5, Math.round(z * 10) / 10)); }
   function quiet() {}
+
+  // Shows/hides an overlay element via the Popover API when available, so
+  // it lives in the browser top layer — above the game's own top-layer UI
+  // (e.g. the focus-session timer card), which plain z-index cannot beat.
+  function setLayer(el, show) {
+    el.style.display = show ? "" : "none";
+    if (typeof el.showPopover === "function" && el.isConnected) {
+      try {
+        var open = el.matches(":popover-open");
+        if (show && !open) { el.showPopover(); }
+        else if (!show && open) { el.hidePopover(); }
+      } catch (err) { /* fall back to display toggling */ }
+    }
+  }
 
   // ---------- themes ----------
   // Each theme: filter(t) with t = intensity 0..1, plus an optional
@@ -126,7 +147,25 @@
     "dreamy":        { label: "Dreamy Haze", tint: [255, 255, 255, 0.09], blend: "soft-light",
       f: function (t) { return "saturate(" + (1 + 0.08 * t) + ") brightness(" + (1 + 0.07 * t) + ") contrast(" + (1 - 0.1 * t) + ")"; } },
     "high-contrast": { label: "Punchy", tint: null,
-      f: function (t) { return "contrast(" + (1 + 0.22 * t) + ") saturate(" + (1 + 0.15 * t) + ")"; } }
+      f: function (t) { return "contrast(" + (1 + 0.22 * t) + ") saturate(" + (1 + 0.15 * t) + ")"; } },
+    "sakura":        { label: "Sakura", tint: [255, 183, 213, 0.18], blend: "soft-light",
+      f: function (t) { return "hue-rotate(" + -6 * t + "deg) saturate(" + (1 + 0.05 * t) + ") brightness(" + (1 + 0.05 * t) + ") contrast(" + (1 - 0.05 * t) + ")"; } },
+    "coffee":        { label: "Coffee House", tint: [64, 41, 27, 0.28], blend: "multiply",
+      f: function (t) { return "sepia(" + 0.45 * t + ") saturate(" + (1 + 0.05 * t) + ") brightness(" + (1 - 0.1 * t) + ") contrast(" + (1 + 0.06 * t) + ")"; } },
+    "arctic":        { label: "Arctic", tint: [190, 225, 255, 0.14], blend: "soft-light",
+      f: function (t) { return "hue-rotate(" + -14 * t + "deg) saturate(" + (1 - 0.18 * t) + ") brightness(" + (1 + 0.08 * t) + ")"; } },
+    "golden-hour":   { label: "Golden Hour", tint: [255, 190, 92, 0.2], blend: "soft-light",
+      f: function (t) { return "sepia(" + 0.18 * t + ") hue-rotate(" + -8 * t + "deg) saturate(" + (1 + 0.18 * t) + ") brightness(" + (1 + 0.02 * t) + ")"; } },
+    "lavender":      { label: "Lavender Dusk", tint: [150, 120, 220, 0.18], blend: "soft-light",
+      f: function (t) { return "hue-rotate(" + 12 * t + "deg) saturate(" + (1 - 0.1 * t) + ") brightness(" + (1 - 0.06 * t) + ") contrast(" + (1 + 0.04 * t) + ")"; } },
+    "terminal":      { label: "Terminal Green", tint: [26, 84, 38, 0.32], blend: "multiply",
+      f: function (t) { return "grayscale(" + 0.85 * t + ") sepia(" + 0.35 * t + ") hue-rotate(" + 55 * t + "deg) saturate(" + (1 + 0.9 * t) + ") contrast(" + (1 + 0.1 * t) + ")"; } },
+    "old-film":      { label: "Old Film", tint: [30, 24, 18, 0.22], blend: "multiply",
+      f: function (t) { return "grayscale(" + 0.9 * t + ") sepia(" + 0.5 * t + ") contrast(" + (1 + 0.12 * t) + ") brightness(" + (1 - 0.05 * t) + ")"; } },
+    "candy":         { label: "Candy Pop", tint: [255, 120, 190, 0.1], blend: "screen",
+      f: function (t) { return "saturate(" + (1 + 0.5 * t) + ") brightness(" + (1 + 0.06 * t) + ") contrast(" + (1 + 0.08 * t) + ")"; } },
+    "deep-space":    { label: "Deep Space", tint: [12, 14, 40, 0.4], blend: "multiply",
+      f: function (t) { return "brightness(" + (1 - 0.32 * t) + ") contrast(" + (1 + 0.14 * t) + ") saturate(" + (1 - 0.28 * t) + ") hue-rotate(" + -10 * t + "deg)"; } }
   };
 
   var tintEl = null;
@@ -556,17 +595,25 @@
     render();
   }
 
-  document.addEventListener("keydown", function (e) {
-    if (e.key === "F11") { e.preventDefault(); toggleFullscreen(); return; }
-    if (e.key === "F9") { e.preventDefault(); toggleMini(); return; }
-    if (e.key === "F10") { e.preventDefault(); toggleHideAll(); return; }
-    if (e.key === "Escape" && panelOpen) { e.preventDefault(); togglePanel(false); return; }
+  // Window-level capture: our init script runs before the game's, so this
+  // listener fires ahead of any game handler that might swallow the key.
+  window.addEventListener("keydown", function (e) {
+    if (e.key === "F11") { e.preventDefault(); e.stopPropagation(); toggleFullscreen(); return; }
+    if (e.key === "F9") { e.preventDefault(); e.stopPropagation(); toggleMini(); return; }
+    if (e.key === "F10") { e.preventDefault(); e.stopPropagation(); toggleHideAll(); return; }
+    if (e.key === "Escape" && panelOpen) { e.preventDefault(); e.stopPropagation(); togglePanel(false); return; }
     if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-      if (e.key === ",") { e.preventDefault(); togglePanel(); }
+      if (e.key === ",") { e.preventDefault(); e.stopPropagation(); togglePanel(); }
       else if (e.key === "=" || e.key === "+") { e.preventDefault(); setZoom(state.zoom + 0.1); }
       else if (e.key === "-") { e.preventDefault(); setZoom(state.zoom - 0.1); }
       else if (e.key === "0") { e.preventDefault(); setZoom(1); }
     }
+  }, true);
+
+  // Clicking anywhere outside the overlay closes the panel. (Shadow DOM
+  // retargets events from inside the overlay to the host element.)
+  document.addEventListener("pointerdown", function (e) {
+    if (panelOpen && hostEl && e.target !== hostEl) { togglePanel(false); }
   }, true);
 
   // ---------- gear position / dragging ----------
@@ -574,8 +621,10 @@
     if (!els) { return; }
     var g = els.gear;
     if (state.web.gear_x == null || state.web.gear_y == null) {
+      // Default sits above the game's focus-session timer card, which
+      // occupies the bottom-right corner.
       g.style.left = ""; g.style.top = "";
-      g.style.right = "14px"; g.style.bottom = "14px";
+      g.style.right = "14px"; g.style.bottom = "190px";
     } else {
       g.style.right = ""; g.style.bottom = "";
       g.style.left = "calc(" + state.web.gear_x + "vw - 18px)";
@@ -616,8 +665,8 @@
   // ---------- panel ----------
   function render() {
     if (!els) { return; }
-    els.gear.style.display = (state.hideGear || panelOpen) ? "none" : "";
-    els.panel.style.display = panelOpen ? "" : "none";
+    setLayer(els.gear, !(state.hideGear || panelOpen));
+    setLayer(els.panel, panelOpen);
     els.fs.checked = state.fullscreen;
     els.pin.checked = state.pin;
     els.hideGear.checked = state.hideGear;
@@ -681,7 +730,7 @@
 
   function mount() {
     if (els || !document.documentElement) { return; }
-    var hostEl = document.createElement("div");
+    hostEl = document.createElement("div");
     hostEl.id = OVERLAY_ID;
     var root = hostEl.attachShadow({ mode: "closed" });
     var themeOptions = "";
@@ -692,11 +741,15 @@
       '<style>' +
       ':host{all:initial}' +
       '*{box-sizing:border-box;font-family:system-ui,sans-serif}' +
-      '#gear{position:fixed;right:14px;bottom:14px;z-index:2147483646;width:36px;height:36px;' +
+      // inset/margin/padding overrides neutralize the UA popover styles;
+      // explicit left/top:auto keep right/bottom anchoring in control.
+      '#gear{position:fixed;inset:auto;left:auto;top:auto;right:14px;bottom:190px;margin:0;padding:0;' +
+      'z-index:2147483647;width:36px;height:36px;' +
       'border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(17,24,39,.55);' +
       'color:#e5e7eb;font-size:18px;line-height:1;cursor:grab;opacity:.35;transition:opacity .15s;touch-action:none}' +
       '#gear:hover{opacity:1}' +
-      '#panel{position:fixed;right:14px;bottom:14px;z-index:2147483646;width:310px;max-height:calc(100vh - 28px);' +
+      '#panel{position:fixed;inset:auto;left:auto;top:auto;right:14px;bottom:14px;margin:0;' +
+      'z-index:2147483647;width:310px;max-height:calc(100vh - 28px);' +
       'overflow-y:auto;padding:14px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.15);' +
       'background:rgba(17,24,39,.96);color:#e5e7eb;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.45)}' +
       '#panel h2{margin:0 0 6px;font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center}' +
@@ -806,6 +859,11 @@
       renderScale: root.getElementById("renderScale"),
       friendQueue: root.getElementById("friendQueue")
     };
+
+    // Top-layer membership (see setLayer). "manual" popovers don't
+    // light-dismiss or trap focus; we manage visibility ourselves.
+    els.gear.setAttribute("popover", "manual");
+    els.panel.setAttribute("popover", "manual");
 
     makeGearDraggable(els.gear);
     root.getElementById("close").addEventListener("click", function () { togglePanel(false); });

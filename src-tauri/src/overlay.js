@@ -88,7 +88,8 @@
       hide_bug: true, hide_radio: false, hide_chat: false,
       hide_game_settings: false, hide_friends: false,
       hide_bottom_popup: false, hide_all_ui: false,
-      render_scale: 1.0
+      render_scale: 1.0,
+      friend_queue: []
     }
   };
   var els = null;
@@ -164,6 +165,20 @@
     if (r.width > vw * 0.45 || r.height > vh * 0.45) { return null; } // canvas/panels
     var cx = r.left + r.width / 2;
     var cy = r.top + r.height / 2;
+    // aria-labels are the most stable signal (confirmed against the live
+    // DOM): "Open room chat panel", "Back", "Close room card".
+    var aria = "";
+    if (el.getAttribute) {
+      aria = (el.getAttribute("aria-label") || "").toLowerCase();
+      if (!aria && el.querySelector) {
+        var labelled = el.querySelector("[aria-label]");
+        if (labelled && el.children.length === 1) {
+          aria = (labelled.getAttribute("aria-label") || "").toLowerCase();
+        }
+      }
+    }
+    if (/chat panel/.test(aria)) { return "chat"; }
+    if (/^back$/.test(aria) || /close room card/.test(aria)) { return "protected"; }
     var text = (el.textContent || "").toLowerCase();
     if (text.length < 60 && /camera\s*angle/.test(text)) { return "camera_bar"; }
     if (cy < vh * 0.15 && cx > vw * 0.80) {
@@ -179,6 +194,7 @@
 
   function shouldHide(bucket) {
     var w = state.web;
+    if (bucket === "protected") { return false; } // Back / Close buttons
     if (w.hide_all_ui) { return true; }
     switch (bucket) {
       case "bug": return w.hide_bug;
@@ -230,7 +246,196 @@
       }
     }
   }
-  setInterval(applyUiHiding, 2500);
+  setInterval(function () {
+    applyUiHiding();
+    scanOccupantCard();
+    checkRoomExit();
+  }, 2500);
+
+  // ---------- add friend from player cards ----------
+  // When a player card (article with an "occupant-card" class, confirmed
+  // against the live DOM) is open, inject an avatar+plus button that
+  // captures the @username. Clicking it: queues the name, copies it to the
+  // clipboard, and best-effort automates the game's own add-friend UI —
+  // in-session, no navigation, so the room connection is never touched.
+  var autoAddAttempted = {};
+
+  function copyText(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(quiet);
+        return;
+      }
+    } catch (err) { /* fall through */ }
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.cssText = "position:fixed;opacity:0";
+      document.documentElement.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    } catch (err2) { quiet(); }
+  }
+
+  function setNativeValue(input, value) {
+    var proto = Object.getPrototypeOf(input);
+    var desc = Object.getOwnPropertyDescriptor(proto, "value") ||
+               Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+    if (desc && desc.set) { desc.set.call(input, value); } else { input.value = value; }
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function visible(el) {
+    var r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }
+
+  function findFriendInput() {
+    var inputs = document.querySelectorAll("input[type='text'], input[type='search'], input:not([type])");
+    for (var i = 0; i < inputs.length; i++) {
+      var inp = inputs[i];
+      if (!visible(inp)) { continue; }
+      var hint = ((inp.getAttribute("placeholder") || "") + " " +
+                  (inp.getAttribute("aria-label") || "") + " " +
+                  (inp.getAttribute("name") || "")).toLowerCase();
+      if (/friend|username|search|invite|add/.test(hint)) { return inp; }
+    }
+    return null;
+  }
+
+  function findNear(root, re) {
+    var scope = root;
+    for (var up = 0; up < 6 && scope; up++) {
+      var btns = scope.querySelectorAll("button, [role='button']");
+      for (var i = 0; i < btns.length; i++) {
+        var b = btns[i];
+        if (!visible(b)) { continue; }
+        var label = ((b.textContent || "") + " " + (b.getAttribute("aria-label") || "")).toLowerCase();
+        if (re.test(label) && label.length < 60) { return b; }
+      }
+      scope = scope.parentElement;
+    }
+    return null;
+  }
+
+  function attemptAutoAdd(username, silent) {
+    var input = findFriendInput();
+    if (!input) {
+      // Try opening a friends/people panel first, then re-look.
+      var opener = findNear(document.body, /friend|people|member|social/);
+      if (opener) {
+        opener.click();
+        setTimeout(function () { attemptAutoAddStage2(username, silent); }, 1200);
+        return;
+      }
+      if (!silent) { toast("Saved @" + username + " — copied to clipboard, paste it in the friends panel"); }
+      return;
+    }
+    attemptAutoAddFill(input, username, silent);
+  }
+  function attemptAutoAddStage2(username, silent) {
+    var input = findFriendInput();
+    if (!input) {
+      if (!silent) { toast("Saved @" + username + " — copied to clipboard, paste it in the friends panel"); }
+      return;
+    }
+    attemptAutoAddFill(input, username, silent);
+  }
+  function attemptAutoAddFill(input, username, silent) {
+    setNativeValue(input, username);
+    setTimeout(function () {
+      var addBtn = findNear(input, /\badd\b|invite|send/);
+      if (addBtn) {
+        addBtn.click();
+        toast("Tried to add @" + username + " — check your friends list");
+        state.web.friend_queue = state.web.friend_queue.filter(function (u) { return u !== username; });
+        saveWebPrefs();
+      } else if (!silent) {
+        toast("Typed @" + username + " into the friends search — finish it there");
+      }
+    }, 900);
+  }
+
+  function addFriend(username) {
+    copyText("@" + username);
+    if (state.web.friend_queue.indexOf(username) === -1) {
+      state.web.friend_queue.push(username);
+      saveWebPrefs();
+    }
+    toast("Captured @" + username + " (copied)");
+    attemptAutoAdd(username, false);
+  }
+
+  function scanOccupantCard() {
+    var cards = document.querySelectorAll("article[class*='occupant-card']");
+    for (var i = 0; i < cards.length; i++) {
+      var card = cards[i];
+      if (card.getAttribute("data-ftw-friend")) { continue; }
+      var m = (card.textContent || "").match(/@([A-Za-z0-9_.-]{2,32})/);
+      if (!m) { continue; }
+      var username = m[1];
+      card.setAttribute("data-ftw-friend", username);
+
+      var btn = document.createElement("button");
+      btn.setAttribute("data-ftw", "1");
+      btn.title = "Add @" + username + " (wrapper)";
+      btn.style.cssText = "position:absolute;left:12px;bottom:12px;z-index:99999;width:40px;height:40px;" +
+        "border-radius:50%;border:2px solid rgba(255,255,255,.9);background:#10b981;color:#fff;" +
+        "cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.3);padding:0;overflow:visible";
+      // Use the card's avatar image as the icon when one exists.
+      var imgs = card.querySelectorAll("img");
+      var face = null;
+      for (var j = 0; j < imgs.length; j++) {
+        var r = imgs[j].getBoundingClientRect();
+        if (r.width >= 24 && Math.abs(r.width - r.height) < r.width * 0.4 &&
+            !/flag|icon|item/.test(imgs[j].src || "")) { face = imgs[j]; break; }
+      }
+      if (face) {
+        var clone = face.cloneNode(false);
+        clone.removeAttribute("class");
+        clone.style.cssText = "width:100%;height:100%;border-radius:50%;object-fit:cover;display:block";
+        btn.appendChild(clone);
+        var plus = document.createElement("span");
+        plus.textContent = "+";
+        plus.style.cssText = "position:absolute;right:-4px;bottom:-4px;width:18px;height:18px;border-radius:50%;" +
+          "background:#10b981;color:#fff;font:bold 14px/17px system-ui;text-align:center;border:1.5px solid #fff";
+        btn.appendChild(plus);
+      } else {
+        btn.textContent = "＋";
+        btn.style.font = "bold 20px system-ui";
+      }
+      (function (name) {
+        btn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          addFriend(name);
+        });
+      })(username);
+
+      var cs = getComputedStyle(card);
+      if (cs.position === "static") { card.style.position = "relative"; }
+      card.appendChild(btn);
+    }
+  }
+
+  // Retry queued names when leaving a room (the friends UI is usually
+  // reachable from the main app pages).
+  var lastPath = location.pathname;
+  function checkRoomExit() {
+    var path = location.pathname;
+    if (path !== lastPath) {
+      var wasInRoom = /\/room\//.test(lastPath);
+      lastPath = path;
+      if (wasInRoom && !/\/room\//.test(path) && state.web.friend_queue.length) {
+        var name = state.web.friend_queue[0];
+        if (!autoAddAttempted[name]) {
+          autoAddAttempted[name] = true;
+          setTimeout(function () { attemptAutoAdd(name, true); }, 3000);
+        }
+      }
+    }
+  }
 
   // ---------- auto camera rotation ----------
   var cameraTimer = null;
@@ -432,6 +637,40 @@
     els.hidePopup.checked = state.web.hide_bottom_popup;
     els.hideAll.textContent = state.web.hide_all_ui ? "Show game UI (F10)" : "Hide ALL game UI (F10)";
     els.renderScale.value = String(state.web.render_scale);
+    renderFriendQueue();
+  }
+
+  function renderFriendQueue() {
+    var host = els.friendQueue;
+    host.textContent = "";
+    if (!state.web.friend_queue.length) {
+      var empty = document.createElement("div");
+      empty.textContent = "No captured usernames yet.";
+      empty.style.cssText = "color:#9ca3af;padding:2px 0";
+      host.appendChild(empty);
+      return;
+    }
+    state.web.friend_queue.forEach(function (name) {
+      var row = document.createElement("div");
+      row.className = "row";
+      var label = document.createElement("span");
+      label.textContent = "@" + name;
+      label.style.cssText = "flex:1;overflow:hidden;text-overflow:ellipsis";
+      var retry = document.createElement("button");
+      retry.textContent = "Add";
+      retry.addEventListener("click", function () { copyText("@" + name); attemptAutoAdd(name, false); });
+      var copy = document.createElement("button");
+      copy.textContent = "Copy";
+      copy.addEventListener("click", function () { copyText("@" + name); toast("Copied @" + name); });
+      var del = document.createElement("button");
+      del.textContent = "✕";
+      del.addEventListener("click", function () {
+        state.web.friend_queue = state.web.friend_queue.filter(function (u) { return u !== name; });
+        saveWebPrefs();
+      });
+      row.appendChild(label); row.appendChild(retry); row.appendChild(copy); row.appendChild(del);
+      host.appendChild(row);
+    });
   }
 
   function mount() {
@@ -505,6 +744,10 @@
       '<label><input type="checkbox" id="hidePopup">Hide bottom popup button</label>' +
       '<button id="hideAll">Hide ALL game UI (F10)</button>' +
 
+      '<h3>Friend queue</h3>' +
+      '<div id="friendQueue"></div>' +
+      '<p class="hint" style="margin:2px 0 0">Open someone\'s player card and click the green + button to capture their @username. The wrapper tries to add them via the game\'s own friends UI; if it can\'t, the name stays here (and on your clipboard) to paste manually.</p>' +
+
       '<h3>Behavior</h3>' +
       '<label><input type="checkbox" id="closeTray">Close button hides to tray</label>' +
       '<label id="keepAwakeRow"><input type="checkbox" id="keepAwake">Keep screen awake</label>' +
@@ -554,7 +797,8 @@
       hideFriends: root.getElementById("hideFriends"),
       hidePopup: root.getElementById("hidePopup"),
       hideAll: root.getElementById("hideAll"),
-      renderScale: root.getElementById("renderScale")
+      renderScale: root.getElementById("renderScale"),
+      friendQueue: root.getElementById("friendQueue")
     };
 
     makeGearDraggable(els.gear);

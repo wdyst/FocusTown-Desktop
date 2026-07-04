@@ -60,6 +60,8 @@ pub struct WebPrefs {
     /// EXPERIMENTAL: supersampling factor (1.0–2.0). Applied by overriding
     /// devicePixelRatio before the game boots; takes effect on reload.
     pub render_scale: f64,
+    /// Usernames captured from player cards, waiting to be friended.
+    pub friend_queue: Vec<String>,
 }
 
 impl Default for WebPrefs {
@@ -81,6 +83,7 @@ impl Default for WebPrefs {
             hide_bottom_popup: false,
             hide_all_ui: false,
             render_scale: 1.0,
+            friend_queue: Vec::new(),
         }
     }
 }

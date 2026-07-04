@@ -249,6 +249,11 @@ fn set_web_prefs(store: State<SettingsStore>, prefs: WebPrefs) -> WebPrefs {
     };
     p.gear_x = clamp_pct(p.gear_x);
     p.gear_y = clamp_pct(p.gear_y);
+    p.render_scale = if p.render_scale.is_finite() {
+        p.render_scale.clamp(1.0, 2.0)
+    } else {
+        1.0
+    };
     store.update(|s| s.web = p.clone());
     p
 }
@@ -413,12 +418,22 @@ pub fn run() {
             let handle = app.handle().clone();
             let start_url: Url = START_URL.parse().expect("START_URL must be a valid URL");
 
+            // EXPERIMENTAL: supersampling. Overrides devicePixelRatio before
+            // any page script runs so the game engine sizes its render
+            // buffer larger, then downscales to the screen (sharper 3D).
+            let scale = initial.web.render_scale.clamp(1.0, 2.0);
+            let dpr_script = format!(
+                "(function(){{var s={scale};if(s>1.01){{var d=window.devicePixelRatio||1;\
+                 try{{Object.defineProperty(window,'devicePixelRatio',{{get:function(){{return d*s;}}}});}}catch(e){{}}}}}})();"
+            );
+
             let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(start_url))
                 .title("FocusTown")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(360.0, 500.0)
                 .visible(!start_hidden)
                 .always_on_top(initial.always_on_top)
+                .initialization_script(&dpr_script)
                 .initialization_script(INIT_SCRIPT)
                 .on_navigation(move |url| {
                     if is_navigation_allowed(url) {

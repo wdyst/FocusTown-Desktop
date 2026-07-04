@@ -57,6 +57,9 @@ pub struct WebPrefs {
     pub hide_friends: bool,
     pub hide_bottom_popup: bool,
     pub hide_all_ui: bool,
+    /// EXPERIMENTAL: supersampling factor (1.0–2.0). Applied by overriding
+    /// devicePixelRatio before the game boots; takes effect on reload.
+    pub render_scale: f64,
 }
 
 impl Default for WebPrefs {
@@ -77,6 +80,7 @@ impl Default for WebPrefs {
             hide_friends: false,
             hide_bottom_popup: false,
             hide_all_ui: false,
+            render_scale: 1.0,
         }
     }
 }

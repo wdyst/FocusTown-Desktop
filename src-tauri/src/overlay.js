@@ -87,7 +87,8 @@
       theme: "none", theme_intensity: 100,
       hide_bug: true, hide_radio: false, hide_chat: false,
       hide_game_settings: false, hide_friends: false,
-      hide_bottom_popup: false, hide_all_ui: false
+      hide_bottom_popup: false, hide_all_ui: false,
+      render_scale: 1.0
     }
   };
   var els = null;
@@ -430,6 +431,7 @@
     els.hideFriends.checked = state.web.hide_friends;
     els.hidePopup.checked = state.web.hide_bottom_popup;
     els.hideAll.textContent = state.web.hide_all_ui ? "Show game UI (F10)" : "Hide ALL game UI (F10)";
+    els.renderScale.value = String(state.web.render_scale);
   }
 
   function mount() {
@@ -509,6 +511,13 @@
       '<label><input type="checkbox" id="autostart">Start with computer (in tray)</label>' +
       '<label><input type="checkbox" id="globalShortcut">Global show/hide<kbd>Ctrl+Alt+F</kbd></label>' +
 
+      '<h3>Experimental</h3>' +
+      '<div class="row">Render scale <select id="renderScale">' +
+      '<option value="1">100% (off)</option><option value="1.25">125%</option>' +
+      '<option value="1.5">150%</option><option value="2">200%</option>' +
+      '</select></div>' +
+      '<p class="hint" style="margin:2px 0 0">Supersampling: renders the game larger and scales it down for a sharper image. Costs GPU. Reloads the page when changed.</p>' +
+
       '<h3>Maintenance</h3>' +
       '<div class="row"><button id="reload">Reload</button><button id="clearData" class="danger">Clear app data…</button></div>' +
       '<label><input type="checkbox" id="hideGear">Hide this button<kbd>Ctrl+,</kbd></label>' +
@@ -544,7 +553,8 @@
       hideSettings: root.getElementById("hideSettings"),
       hideFriends: root.getElementById("hideFriends"),
       hidePopup: root.getElementById("hidePopup"),
-      hideAll: root.getElementById("hideAll")
+      hideAll: root.getElementById("hideAll"),
+      renderScale: root.getElementById("renderScale")
     };
 
     makeGearDraggable(els.gear);
@@ -582,6 +592,14 @@
     bindHide(els.hideFriends, "hide_friends");
     bindHide(els.hidePopup, "hide_bottom_popup");
     els.hideAll.addEventListener("click", toggleHideAll);
+    els.renderScale.addEventListener("change", function () {
+      state.web.render_scale = parseFloat(els.renderScale.value) || 1;
+      invoke("set_web_prefs", { prefs: state.web }).then(function (applied) {
+        state.web = applied;
+        toast("Render scale saved — reloading…");
+        setTimeout(function () { location.reload(); }, 900);
+      }).catch(quiet);
+    });
 
     document.documentElement.appendChild(hostEl);
     applyWebPrefs();

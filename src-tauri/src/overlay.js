@@ -177,6 +177,12 @@
         }
       }
     }
+    // Exact match from the live page source: the bug-report widget ships
+    // with its own class and aria-label, wherever it's positioned.
+    if (/report bug/.test(aria) ||
+        (el.querySelector && el.querySelector(".ft-web-bug-report-shell"))) {
+      return "bug";
+    }
     if (/chat panel/.test(aria)) { return "chat"; }
     if (/^back$/.test(aria) || /close room card/.test(aria)) { return "protected"; }
     var text = (el.textContent || "").toLowerCase();
@@ -188,7 +194,6 @@
     if (cx < vw * 0.06 && cy > vh * 0.30 && cy <= vh * 0.72) { return "chat"; }
     if (cx > vw * 0.94 && cy > vh * 0.30 && cy < vh * 0.75) { return "friends"; }
     if (cy > vh * 0.90 && cx > vw * 0.40 && cx < vw * 0.60) { return "bottom_popup"; }
-    if (cx > vw * 0.85 && cy > vh * 0.70 && cy < vh * 0.88 && r.width < 90) { return "bug"; }
     return null;
   }
 
@@ -299,7 +304,8 @@
       if (!visible(inp)) { continue; }
       var hint = ((inp.getAttribute("placeholder") || "") + " " +
                   (inp.getAttribute("aria-label") || "") + " " +
-                  (inp.getAttribute("name") || "")).toLowerCase();
+                  (inp.getAttribute("name") || "") + " " +
+                  (inp.className || "")).toLowerCase();
       if (/friend|username|search|invite|add/.test(hint)) { return inp; }
     }
     return null;

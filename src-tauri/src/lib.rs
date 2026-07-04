@@ -249,6 +249,16 @@ fn set_web_prefs(store: State<SettingsStore>, prefs: WebPrefs) -> WebPrefs {
     };
     p.gear_x = clamp_pct(p.gear_x);
     p.gear_y = clamp_pct(p.gear_y);
+    // Friend queue: valid handles only, deduplicated, bounded.
+    let mut seen = std::collections::HashSet::new();
+    p.friend_queue.retain(|u| {
+        u.len() >= 2
+            && u.len() <= 32
+            && u.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-')
+            && seen.insert(u.clone())
+    });
+    p.friend_queue.truncate(50);
     store.update(|s| s.web = p.clone());
     p
 }

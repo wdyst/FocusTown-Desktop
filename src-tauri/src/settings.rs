@@ -57,6 +57,8 @@ pub struct WebPrefs {
     pub hide_friends: bool,
     pub hide_bottom_popup: bool,
     pub hide_all_ui: bool,
+    /// Usernames captured from player cards, waiting to be friended.
+    pub friend_queue: Vec<String>,
 }
 
 impl Default for WebPrefs {
@@ -77,6 +79,7 @@ impl Default for WebPrefs {
             hide_friends: false,
             hide_bottom_popup: false,
             hide_all_ui: false,
+            friend_queue: Vec::new(),
         }
     }
 }

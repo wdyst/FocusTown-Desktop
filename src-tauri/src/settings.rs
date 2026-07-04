@@ -16,6 +16,8 @@ pub struct Settings {
     pub keep_awake: bool,
     /// Global Ctrl+Alt+F show/hide hotkey.
     pub global_shortcut: bool,
+    /// Page-side preferences applied by the injected overlay (overlay.js).
+    pub web: WebPrefs,
 }
 
 impl Default for Settings {
@@ -27,6 +29,54 @@ impl Default for Settings {
             close_to_tray: false,
             keep_awake: false,
             global_shortcut: false,
+            web: WebPrefs::default(),
+        }
+    }
+}
+
+/// Preferences that only affect the injected page overlay: themes, the
+/// draggable gear position, auto camera rotation, and game-UI hiding.
+/// The Rust side just persists these; overlay.js interprets them.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WebPrefs {
+    /// Gear button position as viewport percentages; None = default corner.
+    pub gear_x: Option<f64>,
+    pub gear_y: Option<f64>,
+    /// Click the game's "Camera Angle" button on an interval.
+    pub auto_camera: bool,
+    pub auto_camera_secs: u32,
+    /// Visual theme id (see THEMES in overlay.js) and strength 0–100.
+    pub theme: String,
+    pub theme_intensity: u32,
+    /// Game-UI hiding (best-effort, position-based heuristics).
+    pub hide_bug: bool,
+    pub hide_radio: bool,
+    pub hide_chat: bool,
+    pub hide_game_settings: bool,
+    pub hide_friends: bool,
+    pub hide_bottom_popup: bool,
+    pub hide_all_ui: bool,
+}
+
+impl Default for WebPrefs {
+    fn default() -> Self {
+        Self {
+            gear_x: None,
+            gear_y: None,
+            auto_camera: false,
+            auto_camera_secs: 45,
+            theme: "none".into(),
+            theme_intensity: 100,
+            // The bug-report button is hidden by default (user request);
+            // everything else starts visible.
+            hide_bug: true,
+            hide_radio: false,
+            hide_chat: false,
+            hide_game_settings: false,
+            hide_friends: false,
+            hide_bottom_popup: false,
+            hide_all_ui: false,
         }
     }
 }

@@ -3,7 +3,7 @@ mod settings;
 use std::sync::Mutex;
 
 use serde::Serialize;
-use settings::{Settings, SettingsStore};
+use settings::{Settings, SettingsStore, WebPrefs};
 use tauri::{
     AppHandle, Manager, PhysicalPosition, PhysicalSize, State, Url, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent,
@@ -222,6 +222,37 @@ fn set_hide_gear(store: State<SettingsStore>, hide: bool) {
     store.update(|s| s.hide_gear = hide);
 }
 
+/// Persists the page-side preferences (themes, gear position, auto camera,
+/// game-UI hiding). Values are clamped here so a compromised page cannot
+/// store unbounded data.
+#[tauri::command]
+fn set_web_prefs(store: State<SettingsStore>, prefs: WebPrefs) -> WebPrefs {
+    let mut p = prefs;
+    p.auto_camera_secs = p.auto_camera_secs.clamp(10, 600);
+    p.theme_intensity = p.theme_intensity.clamp(0, 100);
+    if p.theme.len() > 40
+        || !p
+            .theme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        p.theme = "none".into();
+    }
+    let clamp_pct = |v: Option<f64>| {
+        v.map(|x| {
+            if x.is_finite() {
+                x.clamp(0.0, 100.0)
+            } else {
+                50.0
+            }
+        })
+    };
+    p.gear_x = clamp_pct(p.gear_x);
+    p.gear_y = clamp_pct(p.gear_y);
+    store.update(|s| s.web = p.clone());
+    p
+}
+
 #[tauri::command]
 fn set_close_to_tray(store: State<SettingsStore>, on: bool) {
     store.update(|s| s.close_to_tray = on);
@@ -363,6 +394,7 @@ pub fn run() {
             set_zoom,
             set_always_on_top,
             set_hide_gear,
+            set_web_prefs,
             set_close_to_tray,
             set_keep_awake,
             set_autostart,

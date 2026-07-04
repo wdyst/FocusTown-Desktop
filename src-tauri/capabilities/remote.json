@@ -13,6 +13,7 @@
     "allow-set-zoom",
     "allow-set-always-on-top",
     "allow-set-hide-gear",
+    "allow-set-web-prefs",
     "allow-set-close-to-tray",
     "allow-set-keep-awake",
     "allow-set-autostart",

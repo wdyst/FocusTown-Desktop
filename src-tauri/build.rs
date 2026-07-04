@@ -9,6 +9,7 @@ fn main() {
             "set_zoom",
             "set_always_on_top",
             "set_hide_gear",
+            "set_web_prefs",
             "set_close_to_tray",
             "set_keep_awake",
             "set_autostart",

@@ -1,0 +1,22 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "remote-window-controls",
+  "description": "The ONLY IPC surface exposed to web content: window/session-control commands (fullscreen, mini mode, zoom, always-on-top, tray/startup behavior, settings persistence, clear-own-data) used by the injected settings overlay. Granted exclusively to the FocusTown origin — auth provider pages and everything else get nothing. Worst case for a compromised page is window manipulation and signing itself out.",
+  "remote": {
+    "urls": ["https://focustown.app", "https://*.focustown.app"]
+  },
+  "windows": ["main"],
+  "permissions": [
+    "allow-get-ui-state",
+    "allow-toggle-fullscreen",
+    "allow-toggle-mini-mode",
+    "allow-set-zoom",
+    "allow-set-always-on-top",
+    "allow-set-hide-gear",
+    "allow-set-close-to-tray",
+    "allow-set-keep-awake",
+    "allow-set-autostart",
+    "allow-set-global-shortcut",
+    "allow-clear-browsing-data"
+  ]
+}

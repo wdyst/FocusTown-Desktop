@@ -1,0 +1,15 @@
+{
+  "name": "focustown-desktop",
+  "private": true,
+  "version": "0.3.0",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:windows-gnu": "tauri build --bundles nsis --config src-tauri/tauri.gnu-windows.conf.json"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

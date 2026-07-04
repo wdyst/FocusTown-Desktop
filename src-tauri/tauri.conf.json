@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FocusTown",
+  "version": "0.3.0",
+  "identifier": "app.focustown.wrapper",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'",
+      "dangerousDisableAssetCspModification": false,
+      "freezePrototype": false
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      }
+    },
+    "shortDescription": "Unofficial desktop app for focustown.app",
+    "longDescription": "An unofficial, security-hardened desktop wrapper around https://focustown.app. All content is loaded from the FocusTown website; this app grants the site no native capabilities.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

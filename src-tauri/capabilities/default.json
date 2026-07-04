@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Deliberately empty: the main window loads remote content (focustown.app) and must not be granted any IPC permissions. External-link opening is done from Rust, which does not require a capability.",
+  "windows": ["main"],
+  "permissions": []
+}

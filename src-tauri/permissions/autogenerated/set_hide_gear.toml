@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-hide-gear"
+description = "Enables the set_hide_gear command without any pre-configured scope."
+commands.allow = ["set_hide_gear"]
+
+[[permission]]
+identifier = "deny-set-hide-gear"
+description = "Denies the set_hide_gear command without any pre-configured scope."
+commands.deny = ["set_hide_gear"]

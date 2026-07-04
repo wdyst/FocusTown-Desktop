@@ -1,0 +1,44 @@
+[package]
+name = "focustown-wrapper"
+version = "0.3.0"
+description = "Unofficial desktop wrapper for focustown.app"
+authors = ["FocusTown Wrapper contributors"]
+license = "MIT"
+edition = "2021"
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "focustown_wrapper_lib"
+# NOTE: when enabling the Android (TV) build, restore
+#   crate-type = ["staticlib", "cdylib", "rlib"]
+# The extra crate types are required for mobile but fail to link on the
+# x86_64-pc-windows-gnu toolchain ("export ordinal too large"); desktop
+# builds only need rlib. Windows release builds should use MSVC anyway.
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
+tauri-plugin-window-state = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Power"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

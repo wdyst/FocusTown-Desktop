@@ -1,6 +1,6 @@
 [package]
 name = "focustown-wrapper"
-version = "0.5.2"
+version = "0.5.3"
 description = "Unofficial desktop wrapper for focustown.app"
 authors = ["FocusTown Wrapper contributors"]
 license = "MIT"

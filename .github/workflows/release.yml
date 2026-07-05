@@ -45,25 +45,32 @@ jobs:
 
       - run: npm ci
 
+      # macOS signing + notarization. Only exported when the secrets exist —
+      # Tauri's bundler treats a *present but empty* APPLE_CERTIFICATE as
+      # "sign now" and fails, so unset secrets must not define the vars at
+      # all. Full guide: docs/signing.md.
+      - name: Configure Apple signing
+        if: matrix.platform == 'macos-latest' && env.HAS_APPLE_SIGNING == 'true'
+        env:
+          HAS_APPLE_SIGNING: ${{ secrets.APPLE_CERTIFICATE != '' }}
+        run: |
+          {
+            echo "APPLE_CERTIFICATE=${{ secrets.APPLE_CERTIFICATE }}"
+            echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.APPLE_CERTIFICATE_PASSWORD }}"
+            echo "APPLE_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}"
+            echo "APPLE_ID=${{ secrets.APPLE_ID }}"
+            echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}"
+            echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}"
+          } >> "$GITHUB_ENV"
+
       - name: Build and draft release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Static CRT so Windows users don't need the VC++ redistributable
           RUSTFLAGS: ${{ matrix.platform == 'windows-latest' && '-C target-feature=+crt-static' || '' }}
-          # --- Code signing (optional) — see docs/signing.md for the full guide.
-          # These activate automatically once the matching repo secrets exist;
-          # empty secrets are ignored, so leaving them unset ships unsigned.
-          # Windows (plain cert; for Azure Trusted Signing see docs/signing.md):
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # macOS signing + notarization (Apple Developer Program):
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Windows Authenticode is configured in tauri.conf.json or via
+          # Azure Trusted Signing — see docs/signing.md.
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "FocusTown Desktop ${{ github.ref_name }}"

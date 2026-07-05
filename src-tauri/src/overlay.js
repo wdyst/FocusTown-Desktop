@@ -713,6 +713,7 @@
   function togglePanel(open) {
     panelOpen = (typeof open === "boolean") ? open : !panelOpen;
     if (panelOpen) {
+      syncPanelTheme();
       invoke("get_ui_state").then(function (s) { applyUiState(s); render(); }).catch(quiet);
     }
     render();
@@ -826,7 +827,7 @@
     if (!state.web.friend_queue.length) {
       var empty = document.createElement("div");
       empty.textContent = "No captured usernames yet.";
-      empty.style.cssText = "color:#9ca3af;padding:2px 0";
+      empty.style.cssText = "color:var(--wp-muted);padding:4px 0";
       host.appendChild(empty);
       return;
     }
@@ -834,15 +835,19 @@
       var row = document.createElement("div");
       row.className = "row";
       var label = document.createElement("span");
+      label.className = "lbl";
       label.textContent = "@" + name;
       label.style.cssText = "flex:1;overflow:hidden;text-overflow:ellipsis";
       var retry = document.createElement("button");
+      retry.className = "btn";
       retry.textContent = "Add";
       retry.addEventListener("click", function () { copyText("@" + name); attemptAutoAdd(name, false); });
       var copy = document.createElement("button");
+      copy.className = "btn";
       copy.textContent = "Copy";
       copy.addEventListener("click", function () { copyText("@" + name); toast("Copied @" + name); });
       var del = document.createElement("button");
+      del.className = "btn danger";
       del.textContent = "✕";
       del.addEventListener("click", function () {
         state.web.friend_queue = state.web.friend_queue.filter(function (u) { return u !== name; });
@@ -869,102 +874,123 @@
     root.innerHTML =
       '<style>' +
       ':host{all:initial}' +
-      '*{box-sizing:border-box;font-family:system-ui,sans-serif}' +
-      // inset/margin/padding overrides neutralize the UA popover styles;
-      // explicit left/top:auto keep right/bottom anchoring in control.
+      // --wp-* are synced from the game's own palette in syncPanelTheme()
+      // (so the panel matches FocusTown and follows dark mode); the values
+      // here are cream-theme fallbacks used before the page palette loads.
+      ':host{--wp-surface:#FFF8E7;--wp-frame:#C4B5A0;--wp-border:#83715B;' +
+      '--wp-soft:#DDD5C7;--wp-text:#5D4037;--wp-muted:#8B7355;--wp-accent:#78ADFD;' +
+      '--wp-accent-dark:#6B8FC9;--wp-tabbar:#FFF1D8;--wp-pill:#FFDAA1;' +
+      '--wp-danger:#C6410D;--wp-success:#90BE6D;--wp-font:system-ui,sans-serif}' +
+      '*{box-sizing:border-box;font-family:var(--wp-font)}' +
       '#gear{position:fixed;inset:auto;left:auto;top:auto;right:14px;bottom:190px;margin:0;padding:0;' +
-      'z-index:2147483647;width:36px;height:36px;' +
-      'border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(17,24,39,.55);' +
-      'color:#e5e7eb;font-size:18px;line-height:1;cursor:grab;opacity:.35;transition:opacity .15s;touch-action:none}' +
+      'z-index:2147483647;width:40px;height:40px;border-radius:50%;' +
+      'border:2px solid var(--wp-border);border-bottom-width:4px;background:var(--wp-surface);' +
+      'color:var(--wp-text);font-size:19px;line-height:1;cursor:grab;opacity:.55;' +
+      'box-shadow:0 4px 10px rgba(54,43,34,.25);transition:opacity .15s;touch-action:none}' +
       '#gear:hover{opacity:1}' +
-      // Anchored top-right — deliberately away from the game's focus-session
-      // timer in the bottom-right, so panel controls are never in the same
-      // pixels as the timer even in a worst-case stacking race.
+      // Top-right, away from the bottom-right game timer.
       '#panel{position:fixed;inset:auto;left:auto;bottom:auto;top:14px;right:14px;margin:0;' +
-      'z-index:2147483647;width:310px;max-height:calc(100vh - 28px);' +
-      'overflow-y:auto;padding:14px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.15);' +
-      'background:rgba(17,24,39,.96);color:#e5e7eb;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.45)}' +
-      '#panel h2{margin:0 0 6px;font-size:13px;font-weight:600;display:flex;gap:8px;align-items:center}' +
-      '#panel h2 small{font-weight:400;color:#9ca3af;margin-left:auto}' +
-      '#headerClose{width:24px;height:24px;padding:0;line-height:1;font-size:15px;flex:0 0 auto}' +
-      '#panel h3{margin:10px 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em}' +
-      '#panel label{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer}' +
-      '#panel .row{display:flex;align-items:center;gap:8px;padding:4px 0}' +
-      '#panel button{border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#e5e7eb;' +
-      'border-radius:6px;padding:3px 9px;cursor:pointer;font-size:13px}' +
-      '#panel button:hover{background:rgba(255,255,255,.16)}' +
-      '#panel button.danger{border-color:rgba(248,113,113,.4);color:#fca5a5}' +
-      '#panel select{background:rgba(255,255,255,.08);color:#e5e7eb;border:1px solid rgba(255,255,255,.2);' +
-      'border-radius:6px;padding:3px 6px;font-size:13px}' +
-      '#panel select option{background:#111827}' +
-      '#panel input[type=range]{flex:1;accent-color:#93c5fd}' +
-      '#zoomVal{min-width:44px;text-align:center;color:#d1d5db}' +
-      '#intensityVal{min-width:40px;text-align:right;color:#d1d5db}' +
-      'kbd{border:1px solid rgba(255,255,255,.25);border-radius:4px;padding:0 4px;font-size:11px;color:#9ca3af;margin-left:auto}' +
-      '.hint{margin:8px 0 0;color:#9ca3af;font-size:11px;line-height:1.55}' +
-      '#close{margin-left:auto}' +
-      '#hideAll{width:100%;margin-top:4px}' +
+      'z-index:2147483647;width:320px;max-height:calc(100vh - 28px);display:flex;flex-direction:column;' +
+      'padding:0;border:3px solid var(--wp-border);border-bottom-width:8px;border-radius:22px;' +
+      'background:var(--wp-frame);color:var(--wp-text);font-size:13px;box-shadow:0 14px 36px rgba(54,43,34,.32)}' +
+      '.inner{background:var(--wp-surface);border-radius:18px;margin:4px;padding:12px 14px 14px;' +
+      'overflow-y:auto;display:flex;flex-direction:column;gap:2px}' +
+      '.hdr{display:flex;align-items:center;gap:8px;margin-bottom:8px}' +
+      '.hdr .ttl{font-size:15px;font-weight:700;color:var(--wp-text)}' +
+      '.hdr .ver{font-size:11px;color:var(--wp-muted);font-weight:600}' +
+      '#headerClose{margin-left:auto;width:28px;height:28px;padding:0;font-size:16px;border-radius:10px}' +
+      '.tabs{display:flex;gap:3px;padding:3px;background:var(--wp-tabbar);border-radius:12px;margin-bottom:10px}' +
+      '.tab{flex:1;border:none;background:transparent;color:var(--wp-muted);font-weight:700;font-size:12px;' +
+      'padding:6px 4px;border-radius:9px;cursor:pointer}' +
+      '.tab.on{background:var(--wp-pill);color:var(--wp-text);box-shadow:0 2px 4px rgba(92,69,46,.18)}' +
+      '.pane{display:none;flex-direction:column;gap:2px}' +
+      '.pane.on{display:flex}' +
+      '.opt{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;cursor:pointer;' +
+      'border-bottom:1px solid var(--wp-soft)}' +
+      '.opt:last-child{border-bottom:none}' +
+      '.opt>.lbl{flex:1;color:var(--wp-text);font-weight:600}' +
+      '.opt .sub{display:block;font-weight:500;font-size:11px;color:var(--wp-muted)}' +
+      'input[type=checkbox]{appearance:none;-webkit-appearance:none;width:40px;height:23px;border-radius:999px;' +
+      'background:var(--wp-soft);border:none;position:relative;cursor:pointer;transition:background .15s;flex:0 0 auto;margin:0}' +
+      'input[type=checkbox]::before{content:"";position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;' +
+      'background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}' +
+      'input[type=checkbox]:checked{background:var(--wp-accent)}' +
+      'input[type=checkbox]:checked::before{transform:translateX(17px)}' +
+      'select{background:var(--wp-surface);color:var(--wp-text);border:2px solid var(--wp-soft);' +
+      'border-radius:10px;padding:5px 8px;font-size:12px;font-weight:600;cursor:pointer}' +
+      'input[type=range]{flex:1;accent-color:var(--wp-accent)}' +
+      '.btn{border:2px solid var(--wp-border);border-bottom-width:4px;background:var(--wp-surface);' +
+      'color:var(--wp-text);border-radius:12px;padding:5px 11px;cursor:pointer;font-size:12px;font-weight:700}' +
+      '.btn:active{transform:translateY(2px);border-bottom-width:2px}' +
+      '.btn.primary{background:var(--wp-accent);border-color:var(--wp-accent-dark);color:#fff}' +
+      '.btn.danger{border-color:var(--wp-danger);color:var(--wp-danger)}' +
+      '.btn.wide{width:100%;margin-top:6px}' +
+      '.row{display:flex;align-items:center;gap:8px;padding:6px 0}' +
+      '.row .lbl{flex:1;font-weight:600}' +
+      'kbd{border:1.5px solid var(--wp-soft);border-radius:5px;padding:0 5px;font-size:11px;color:var(--wp-muted);font-weight:700}' +
+      '.val{min-width:44px;text-align:center;color:var(--wp-text);font-weight:700}' +
+      '.hint{margin:8px 0 0;color:var(--wp-muted);font-size:11px;line-height:1.5}' +
+      '.fq .row{border-bottom:1px solid var(--wp-soft)}' +
+      '.fq .btn{padding:3px 8px}' +
       '</style>' +
-      '<button id="gear" title="Wrapper settings (Ctrl+,) — drag to move, double-click to reset">&#9881;</button>' +
-      '<div id="panel" style="display:none">' +
-      '<h2>Wrapper settings <small id="version"></small>' +
-      '<button id="headerClose" title="Close (Esc)">&times;</button></h2>' +
+      '<button id="gear" title="FocusTown settings (Ctrl+,) — drag to move, double-click to reset">&#9881;</button>' +
+      '<div id="panel" style="display:none"><div class="inner">' +
+      '<div class="hdr"><span class="ttl">FocusTown</span><span class="ver" id="version"></span>' +
+      '<button class="btn" id="headerClose" title="Close (Esc)">&times;</button></div>' +
+      '<div class="tabs">' +
+      '<button class="tab on" data-pane="Look">Look</button>' +
+      '<button class="tab" data-pane="Window">Window</button>' +
+      '<button class="tab" data-pane="Game">Game</button>' +
+      '<button class="tab" data-pane="More">More</button></div>' +
 
-      '<h3>Window</h3>' +
-      '<label><input type="checkbox" id="fs">Fullscreen<kbd>F11</kbd></label>' +
-      '<label><input type="checkbox" id="pin">Always on top</label>' +
-      '<div class="row"><button id="mini">Mini mode</button><kbd>F9</kbd></div>' +
-      '<div class="row">Zoom <button id="zoomOut">&minus;</button><span id="zoomVal">100%</span>' +
-      '<button id="zoomIn">+</button><button id="zoomReset">Reset</button></div>' +
+      '<div class="pane on" data-pane="Look">' +
+      '<div class="row"><span class="lbl">Filter</span><select id="theme">' + themeOptions + '</select></div>' +
+      '<div class="row"><span class="lbl">Strength</span><input type="range" id="intensity" min="25" max="100" step="25"><span class="val" id="intensityVal">100%</span></div>' +
+      '<div class="row"><span class="lbl">UI skin</span><select id="reskin">' + reskinOptions + '</select></div>' +
+      '<p class="hint">UI skin recolors the menus, cards and timer (dark mode) — the town stays full-colour. Filters tint the whole view.</p>' +
+      '</div>' +
 
-      '<h3>Appearance</h3>' +
-      '<div class="row">Filter <select id="theme">' + themeOptions + '</select></div>' +
-      '<div class="row">Strength <input type="range" id="intensity" min="25" max="100" step="25"><span id="intensityVal">100%</span></div>' +
-      '<div class="row">UI skin <select id="reskin">' + reskinOptions + '</select></div>' +
-      '<p class="hint" style="margin:2px 0 0">UI skin recolors menus/cards/timer (dark mode); the town itself is unchanged. Filters tint the whole view.</p>' +
+      '<div class="pane" data-pane="Window">' +
+      '<label class="opt"><span class="lbl">Fullscreen <kbd>F11</kbd></span><input type="checkbox" id="fs"></label>' +
+      '<label class="opt"><span class="lbl">Always on top</span><input type="checkbox" id="pin"></label>' +
+      '<div class="row"><span class="lbl">Mini mode <kbd>F9</kbd></span><button class="btn" id="mini">Mini mode</button></div>' +
+      '<div class="row"><span class="lbl">Zoom</span><button class="btn" id="zoomOut">&minus;</button>' +
+      '<span class="val" id="zoomVal">100%</span><button class="btn" id="zoomIn">+</button><button class="btn" id="zoomReset">Reset</button></div>' +
+      '<label class="opt"><span class="lbl">Close button hides to tray</span><input type="checkbox" id="closeTray"></label>' +
+      '<label class="opt" id="keepAwakeRow"><span class="lbl">Keep screen awake</span><input type="checkbox" id="keepAwake"></label>' +
+      '<label class="opt"><span class="lbl">Start with computer<span class="sub">launches hidden in the tray</span></span><input type="checkbox" id="autostart"></label>' +
+      '<label class="opt"><span class="lbl">Global show / hide <kbd>Ctrl+Alt+F</kbd></span><input type="checkbox" id="globalShortcut"></label>' +
+      '</div>' +
 
-      '<h3>Camera</h3>' +
-      '<label><input type="checkbox" id="autoCam">Auto-rotate camera angle</label>' +
-      '<div class="row">Every <select id="camSecs">' +
+      '<div class="pane" data-pane="Game">' +
+      '<label class="opt"><span class="lbl">Hide bug-report button</span><input type="checkbox" id="hideBug"></label>' +
+      '<label class="opt"><span class="lbl">Hide radio<span class="sub">bottom-left</span></span><input type="checkbox" id="hideRadio"></label>' +
+      '<label class="opt"><span class="lbl">Hide chat tab<span class="sub">left</span></span><input type="checkbox" id="hideChat"></label>' +
+      '<label class="opt"><span class="lbl">Hide game settings<span class="sub">top-right</span></span><input type="checkbox" id="hideSettings"></label>' +
+      '<label class="opt"><span class="lbl">Hide friends tab<span class="sub">right</span></span><input type="checkbox" id="hideFriends"></label>' +
+      '<label class="opt"><span class="lbl">Hide bottom popup</span><input type="checkbox" id="hidePopup"></label>' +
+      '<button class="btn wide" id="hideAll">Hide ALL game UI (F10)</button>' +
+      '<label class="opt" style="margin-top:6px"><span class="lbl">Auto-rotate camera</span><input type="checkbox" id="autoCam"></label>' +
+      '<div class="row"><span class="lbl">Rotate every</span><select id="camSecs">' +
       '<option value="20">20 seconds</option><option value="45">45 seconds</option>' +
-      '<option value="90">1.5 minutes</option><option value="180">3 minutes</option>' +
-      '</select></div>' +
+      '<option value="90">1.5 minutes</option><option value="180">3 minutes</option></select></div>' +
+      '<p class="hint">Friends: open a player card in a room and tap the green + to capture them.</p>' +
+      '<div class="fq" id="friendQueue"></div>' +
+      '</div>' +
 
-      '<h3>Game UI</h3>' +
-      '<label><input type="checkbox" id="hideBug">Hide bug-report button</label>' +
-      '<label><input type="checkbox" id="hideRadio">Hide radio (bottom-left)</label>' +
-      '<label><input type="checkbox" id="hideChat">Hide chat tab (left)</label>' +
-      '<label><input type="checkbox" id="hideSettings">Hide game settings (top-right)</label>' +
-      '<label><input type="checkbox" id="hideFriends">Hide friends tab (right)</label>' +
-      '<label><input type="checkbox" id="hidePopup">Hide bottom popup button</label>' +
-      '<button id="hideAll">Hide ALL game UI (F10)</button>' +
-
-      '<h3>Friend queue</h3>' +
-      '<div id="friendQueue"></div>' +
-      '<p class="hint" style="margin:2px 0 0">Open someone\'s player card and click the green + button to capture their @username. The wrapper tries to add them via the game\'s own friends UI; if it can\'t, the name stays here (and on your clipboard) to paste manually.</p>' +
-
-      '<h3>Behavior</h3>' +
-      '<label><input type="checkbox" id="closeTray">Close button hides to tray</label>' +
-      '<label id="keepAwakeRow"><input type="checkbox" id="keepAwake">Keep screen awake</label>' +
-      '<label><input type="checkbox" id="autostart">Start with computer (in tray)</label>' +
-      '<label><input type="checkbox" id="globalShortcut">Global show/hide<kbd>Ctrl+Alt+F</kbd></label>' +
-
-      '<h3>Experimental</h3>' +
-      '<div class="row">Render scale <select id="renderScale">' +
-      '<option value="1">100% (off)</option><option value="1.25">125%</option>' +
-      '<option value="1.5">150%</option><option value="2">200%</option>' +
-      '</select></div>' +
-      '<p class="hint" style="margin:2px 0 0">Supersampling: renders the game larger and scales it down for a sharper image. Costs GPU. Reloads the page when changed.</p>' +
-
-      '<h3>Maintenance</h3>' +
-      '<div class="row"><button id="reload">Reload</button><button id="clearData" class="danger">Clear app data…</button></div>' +
-      '<label><input type="checkbox" id="hideGear">Hide this button<kbd>Ctrl+,</kbd></label>' +
-      '<div class="row"><button id="close">Close</button></div>' +
-
-      '<p class="hint">Drag the &#9881; button anywhere (double-click it to reset). ' +
-      'Game-UI hiding recognizes FocusTown\'s buttons by position, so a game update can shift them — ' +
-      'if a toggle stops working, it fails safe (nothing breaks). The focus timer always stays visible.</p>' +
-      '</div>';
+      '<div class="pane" data-pane="More">' +
+      '<div class="row"><button class="btn" id="reload">Reload page</button>' +
+      '<button class="btn danger" id="clearData">Clear app data…</button></div>' +
+      '<label class="opt"><span class="lbl">Hide the &#9881; button <kbd>Ctrl+,</kbd></span><input type="checkbox" id="hideGear"></label>' +
+      '<div class="row"><span class="lbl">Render scale<span class="sub">experimental · sharper, uses GPU</span></span><select id="renderScale">' +
+      '<option value="1">100%</option><option value="1.25">125%</option>' +
+      '<option value="1.5">150%</option><option value="2">200%</option></select></div>' +
+      '<p class="hint"><b>Shortcuts:</b> F11 fullscreen · F9 mini · F10 hide UI · Ctrl+, settings · Ctrl +/&minus;/0 zoom.<br>' +
+      'Drag the &#9881; anywhere; double-click it to reset. Game-UI hiding matches FocusTown\'s buttons and fails safe if the game changes.</p>' +
+      '<p class="hint">Unofficial community app — not affiliated with FocusTown.</p>' +
+      '<div class="row"><button class="btn primary wide" id="close">Close</button></div>' +
+      '</div>' +
+      '</div></div>';
 
     els = {
       gear: root.getElementById("gear"),
@@ -1048,9 +1074,64 @@
       }).catch(quiet);
     });
 
+    // Tabs
+    var tabs = root.querySelectorAll(".tab");
+    var panes = root.querySelectorAll(".pane");
+    for (var ti = 0; ti < tabs.length; ti++) {
+      tabs[ti].addEventListener("click", function (e) {
+        var want = e.currentTarget.getAttribute("data-pane");
+        for (var a = 0; a < tabs.length; a++) {
+          tabs[a].classList.toggle("on", tabs[a].getAttribute("data-pane") === want);
+        }
+        for (var b = 0; b < panes.length; b++) {
+          panes[b].classList.toggle("on", panes[b].getAttribute("data-pane") === want);
+        }
+      });
+    }
+
     document.documentElement.appendChild(hostEl);
+    syncPanelTheme();
     applyWebPrefs();
     render();
+
+    // First-run tip (per browser profile).
+    try {
+      if (!localStorage.getItem("ftw_onboarded")) {
+        localStorage.setItem("ftw_onboarded", "1");
+        setTimeout(function () { toast("Tip: press Ctrl+, for FocusTown wrapper settings"); }, 4500);
+      }
+    } catch (err) { /* storage blocked — skip */ }
+  }
+
+  // Copies FocusTown's live palette onto the panel (via --wp-* custom
+  // properties on the shadow host) so it matches the game and follows the
+  // dark-mode reskin. Falls back to the cream defaults baked into the CSS.
+  function syncPanelTheme() {
+    if (!hostEl) { return; }
+    var main = document.querySelector('main[class*="ft-webapp"]') || document.querySelector("main");
+    if (!main) { return; }
+    var cs;
+    try { cs = getComputedStyle(main); } catch (err) { return; }
+    var map = {
+      "--wp-surface": "--ft-chrome-webapp-raised-card-inner-alt-bg",
+      "--wp-frame": "--ft-chrome-webapp-raised-card-outer-bg",
+      "--wp-border": "--ft-colors-borders-brown",
+      "--wp-soft": "--ft-colors-borders-soft-taupe",
+      "--wp-text": "--ft-colors-text-primary",
+      "--wp-muted": "--ft-colors-text-secondary",
+      "--wp-accent": "--ft-colors-semantic-primary",
+      "--wp-accent-dark": "--ft-colors-semantic-primary-dark",
+      "--wp-tabbar": "--ft-chrome-webapp-tab-bar-segment-bg",
+      "--wp-pill": "--ft-chrome-webapp-tab-pill-bg",
+      "--wp-danger": "--ft-colors-semantic-danger",
+      "--wp-success": "--ft-colors-semantic-success"
+    };
+    for (var k in map) {
+      var v = cs.getPropertyValue(map[k]).trim();
+      if (v) { hostEl.style.setProperty(k, v); }
+    }
+    var font = cs.fontFamily;
+    if (font) { hostEl.style.setProperty("--wp-font", font); }
   }
 
   invoke("get_ui_state").then(function (s) {

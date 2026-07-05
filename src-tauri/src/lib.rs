@@ -230,13 +230,13 @@ fn set_web_prefs(store: State<SettingsStore>, prefs: WebPrefs) -> WebPrefs {
     let mut p = prefs;
     p.auto_camera_secs = p.auto_camera_secs.clamp(10, 600);
     p.theme_intensity = p.theme_intensity.clamp(0, 100);
-    if p.theme.len() > 40
-        || !p
-            .theme
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-')
-    {
+    let valid_id =
+        |s: &str| s.len() <= 40 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+    if !valid_id(&p.theme) {
         p.theme = "none".into();
+    }
+    if !valid_id(&p.reskin) {
+        p.reskin = "none".into();
     }
     let clamp_pct = |v: Option<f64>| {
         v.map(|x| {

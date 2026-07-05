@@ -90,7 +90,7 @@
     web: {
       gear_x: null, gear_y: null,
       auto_camera: false, auto_camera_secs: 45,
-      theme: "none", theme_intensity: 100,
+      theme: "none", theme_intensity: 100, reskin: "none",
       hide_bug: true, hide_radio: false, hide_chat: false,
       hide_game_settings: false, hide_friends: false,
       hide_bottom_popup: false, hide_all_ui: false,
@@ -108,11 +108,15 @@
   // Shows/hides an overlay element via the Popover API when available, so
   // it lives in the browser top layer — above the game's own top-layer UI
   // (e.g. the focus-session timer card), which plain z-index cannot beat.
-  function setLayer(el, show) {
+  function setLayer(el, show, promote) {
     el.style.display = show ? "" : "none";
     if (typeof el.showPopover === "function" && el.isConnected) {
       try {
         var open = el.matches(":popover-open");
+        // `promote` re-asserts top-layer membership by re-showing: the top
+        // layer stacks by promotion order, so this lifts us above any game
+        // UI (e.g. the timer) that promoted itself after us.
+        if (show && open && promote) { el.hidePopover(); open = false; }
         if (show && !open) { el.showPopover(); }
         else if (!show && open) { el.hidePopover(); }
       } catch (err) { /* fall back to display toggling */ }
@@ -186,6 +190,123 @@
     } else {
       tintEl.style.display = "none";
     }
+  }
+
+  // ---------- UI reskin (dark mode) ----------
+  // FocusTown exposes its whole palette as inline --ft-* CSS variables on
+  // <main>. We recolor the HTML chrome (cards, menus, timer, buttons) by
+  // reading those variables and re-declaring them, transformed, in a
+  // stylesheet with !important — which beats the inline values and, because
+  // it targets by selector, keeps applying across SPA re-renders. The 3D
+  // town is a <canvas> and is unaffected, so only the UI is reskinned.
+  var RESKINS = { "none": "None", "dark": "Dark", "midnight": "Midnight Blue", "warm": "Warm Dark" };
+
+  function parseColor(str) {
+    str = str.trim();
+    if (str.charAt(0) === "#") {
+      var hex = str.slice(1);
+      if (hex.length === 3) { hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2]; }
+      if (hex.length !== 6 || /[^0-9a-f]/i.test(hex)) { return null; }
+      var n = parseInt(hex, 16);
+      return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a: 1 };
+    }
+    var m = str.match(/^rgba?\(([^)]+)\)$/i);
+    if (m) {
+      var p = m[1].split(",");
+      if (p.length < 3) { return null; }
+      var r = parseFloat(p[0]), g = parseFloat(p[1]), b = parseFloat(p[2]);
+      var a = p.length > 3 ? parseFloat(p[3]) : 1;
+      if (isNaN(r) || isNaN(g) || isNaN(b)) { return null; }
+      return { r: r, g: g, b: b, a: isNaN(a) ? 1 : a };
+    }
+    return null;
+  }
+
+  function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    var h = 0, s = 0, l = (max + min) / 2;
+    if (d) {
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) { h = (g - b) / d + (g < b ? 6 : 0); }
+      else if (max === g) { h = (b - r) / d + 2; }
+      else { h = (r - g) / d + 4; }
+      h *= 60;
+    }
+    return [h, s, l];
+  }
+  function hslToRgb(h, s, l) {
+    h = ((h % 360) + 360) % 360 / 360;
+    function hue(p, q, t) {
+      if (t < 0) { t += 1; } if (t > 1) { t -= 1; }
+      if (t < 1 / 6) { return p + (q - p) * 6 * t; }
+      if (t < 1 / 2) { return q; }
+      if (t < 2 / 3) { return p + (q - p) * (2 / 3 - t) * 6; }
+      return p;
+    }
+    var r, g, b;
+    if (!s) { r = g = b = l; }
+    else {
+      var q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+      r = hue(p, q, h + 1 / 3); g = hue(p, q, h); b = hue(p, q, h - 1 / 3);
+    }
+    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+  }
+  function reskinColor(c, mode) {
+    var hsl = rgbToHsl(c.r, c.g, c.b), h = hsl[0], s = hsl[1], l = hsl[2];
+    // Leave near-pure white/black untouched: these are semantic "text on a
+    // colored button is white" / "pure black" tokens. Inverting them would
+    // put dark text on now-dark buttons.
+    if (s < 0.15 && (l > 0.9 || l < 0.1)) { return null; }
+    // Chroma (not HSL saturation, which spikes near white) separates neutral
+    // chrome surfaces from vivid accent colors. Only neutral surfaces get
+    // tinted toward the theme hue; accents (blue buttons, green success…)
+    // keep their real hue so the dark UI stays coherent.
+    var chroma = Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b);
+    var neutralish = chroma < 40;
+    var nl, ns = s, nh = h;
+    if (mode === "dark") { nl = 1 - 0.90 * l; ns = s * 0.85; }
+    else if (mode === "midnight") {
+      nl = 1 - 0.92 * l; ns = s * 0.85;
+      if (neutralish) { nh = 222; ns = Math.max(ns * 0.6 + 0.12, 0.14); }
+    } else if (mode === "warm") {
+      nl = 1 - 0.88 * l; ns = s * 0.9;
+      if (neutralish) { nh = 30; ns = Math.max(ns * 0.6 + 0.10, 0.12); }
+    } else { return null; }
+    nl = Math.max(0, Math.min(1, nl));
+    var o = hslToRgb(nh, ns, nl);
+    return c.a < 1 ? "rgba(" + o[0] + "," + o[1] + "," + o[2] + "," + c.a + ")"
+                   : "rgb(" + o[0] + "," + o[1] + "," + o[2] + ")";
+  }
+
+  var reskinStyleEl = null, reskinBuiltMode = null;
+  function applyReskin() {
+    var mode = state.web.reskin || "none";
+    if (mode === "none") {
+      if (reskinStyleEl) { reskinStyleEl.textContent = ""; }
+      reskinBuiltMode = "none";
+      return;
+    }
+    if (reskinBuiltMode === mode && reskinStyleEl && reskinStyleEl.textContent) { return; }
+    var main = document.querySelector('main[class*="ft-webapp"]') || document.querySelector("main");
+    if (!main) { return; }
+    var decls = [];
+    for (var i = 0; i < main.style.length; i++) {
+      var n = main.style[i];
+      if (n.indexOf("--ft-") !== 0) { continue; }
+      var c = parseColor(main.style.getPropertyValue(n));
+      if (!c) { continue; }
+      var rc = reskinColor(c, mode);
+      if (rc) { decls.push(n + ":" + rc + " !important"); }
+    }
+    if (!decls.length) { return; } // palette not present yet — retry next tick
+    if (!reskinStyleEl) {
+      reskinStyleEl = document.createElement("style");
+      reskinStyleEl.id = OVERLAY_ID + "_reskin";
+      document.documentElement.appendChild(reskinStyleEl);
+    }
+    reskinStyleEl.textContent = 'main[class*="ft-webapp"]{' + decls.join(";") + "}";
+    reskinBuiltMode = mode;
   }
 
   // ---------- game-UI recognition + hiding ----------
@@ -292,6 +413,7 @@
   }
   setInterval(function () {
     applyUiHiding();
+    applyReskin();
     scanOccupantCard();
     checkRoomExit();
   }, 2500);
@@ -505,6 +627,7 @@
 
   function applyWebPrefs() {
     applyTheme();
+    applyReskin();
     applyAutoCamera();
     applyUiHiding();
     applyGearPosition();
@@ -666,7 +789,8 @@
   function render() {
     if (!els) { return; }
     setLayer(els.gear, !(state.hideGear || panelOpen));
-    setLayer(els.panel, panelOpen);
+    // Re-promote the panel to the top layer each time it's shown.
+    setLayer(els.panel, panelOpen, panelOpen);
     els.fs.checked = state.fullscreen;
     els.pin.checked = state.pin;
     els.hideGear.checked = state.hideGear;
@@ -679,6 +803,7 @@
     els.zoomVal.textContent = Math.round(state.zoom * 100) + "%";
     els.version.textContent = state.version ? "v" + state.version : "";
     els.theme.value = state.web.theme;
+    els.reskin.value = state.web.reskin || "none";
     els.intensity.value = String(state.web.theme_intensity);
     els.intensityVal.textContent = state.web.theme_intensity + "%";
     els.autoCam.checked = state.web.auto_camera;
@@ -737,6 +862,10 @@
     for (var key in THEMES) {
       themeOptions += '<option value="' + key + '">' + THEMES[key].label + "</option>";
     }
+    var reskinOptions = "";
+    for (var rk in RESKINS) {
+      reskinOptions += '<option value="' + rk + '">' + RESKINS[rk] + "</option>";
+    }
     root.innerHTML =
       '<style>' +
       ':host{all:initial}' +
@@ -748,12 +877,16 @@
       'border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(17,24,39,.55);' +
       'color:#e5e7eb;font-size:18px;line-height:1;cursor:grab;opacity:.35;transition:opacity .15s;touch-action:none}' +
       '#gear:hover{opacity:1}' +
-      '#panel{position:fixed;inset:auto;left:auto;top:auto;right:14px;bottom:14px;margin:0;' +
+      // Anchored top-right — deliberately away from the game's focus-session
+      // timer in the bottom-right, so panel controls are never in the same
+      // pixels as the timer even in a worst-case stacking race.
+      '#panel{position:fixed;inset:auto;left:auto;bottom:auto;top:14px;right:14px;margin:0;' +
       'z-index:2147483647;width:310px;max-height:calc(100vh - 28px);' +
       'overflow-y:auto;padding:14px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.15);' +
       'background:rgba(17,24,39,.96);color:#e5e7eb;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.45)}' +
-      '#panel h2{margin:0 0 6px;font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center}' +
-      '#panel h2 small{font-weight:400;color:#9ca3af}' +
+      '#panel h2{margin:0 0 6px;font-size:13px;font-weight:600;display:flex;gap:8px;align-items:center}' +
+      '#panel h2 small{font-weight:400;color:#9ca3af;margin-left:auto}' +
+      '#headerClose{width:24px;height:24px;padding:0;line-height:1;font-size:15px;flex:0 0 auto}' +
       '#panel h3{margin:10px 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em}' +
       '#panel label{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer}' +
       '#panel .row{display:flex;align-items:center;gap:8px;padding:4px 0}' +
@@ -774,7 +907,8 @@
       '</style>' +
       '<button id="gear" title="Wrapper settings (Ctrl+,) — drag to move, double-click to reset">&#9881;</button>' +
       '<div id="panel" style="display:none">' +
-      '<h2>Wrapper settings <small id="version"></small></h2>' +
+      '<h2>Wrapper settings <small id="version"></small>' +
+      '<button id="headerClose" title="Close (Esc)">&times;</button></h2>' +
 
       '<h3>Window</h3>' +
       '<label><input type="checkbox" id="fs">Fullscreen<kbd>F11</kbd></label>' +
@@ -784,8 +918,10 @@
       '<button id="zoomIn">+</button><button id="zoomReset">Reset</button></div>' +
 
       '<h3>Appearance</h3>' +
-      '<div class="row">Theme <select id="theme">' + themeOptions + '</select></div>' +
+      '<div class="row">Filter <select id="theme">' + themeOptions + '</select></div>' +
       '<div class="row">Strength <input type="range" id="intensity" min="25" max="100" step="25"><span id="intensityVal">100%</span></div>' +
+      '<div class="row">UI skin <select id="reskin">' + reskinOptions + '</select></div>' +
+      '<p class="hint" style="margin:2px 0 0">UI skin recolors menus/cards/timer (dark mode); the town itself is unchanged. Filters tint the whole view.</p>' +
 
       '<h3>Camera</h3>' +
       '<label><input type="checkbox" id="autoCam">Auto-rotate camera angle</label>' +
@@ -845,6 +981,7 @@
       zoomVal: root.getElementById("zoomVal"),
       version: root.getElementById("version"),
       theme: root.getElementById("theme"),
+      reskin: root.getElementById("reskin"),
       intensity: root.getElementById("intensity"),
       intensityVal: root.getElementById("intensityVal"),
       autoCam: root.getElementById("autoCam"),
@@ -867,6 +1004,7 @@
 
     makeGearDraggable(els.gear);
     root.getElementById("close").addEventListener("click", function () { togglePanel(false); });
+    root.getElementById("headerClose").addEventListener("click", function () { togglePanel(false); });
     els.fs.addEventListener("change", toggleFullscreen);
     els.pin.addEventListener("change", function () { setPin(els.pin.checked); });
     els.mini.addEventListener("click", toggleMini);
@@ -882,6 +1020,7 @@
     root.getElementById("clearData").addEventListener("click", clearData);
 
     els.theme.addEventListener("change", function () { state.web.theme = els.theme.value; saveWebPrefs(); });
+    els.reskin.addEventListener("change", function () { state.web.reskin = els.reskin.value; saveWebPrefs(); });
     els.intensity.addEventListener("input", function () {
       state.web.theme_intensity = parseInt(els.intensity.value, 10) || 100;
       els.intensityVal.textContent = state.web.theme_intensity + "%";

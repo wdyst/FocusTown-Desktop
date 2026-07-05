@@ -49,6 +49,9 @@ pub struct WebPrefs {
     /// Visual theme id (see THEMES in overlay.js) and strength 0–100.
     pub theme: String,
     pub theme_intensity: u32,
+    /// UI reskin id: recolors the game's HTML chrome (cards, menus, timer)
+    /// by overriding its --ft-* CSS variables. "none" | "dark" | ...
+    pub reskin: String,
     /// Game-UI hiding (best-effort, position-based heuristics).
     pub hide_bug: bool,
     pub hide_radio: bool,
@@ -73,6 +76,7 @@ impl Default for WebPrefs {
             auto_camera_secs: 45,
             theme: "none".into(),
             theme_intensity: 100,
+            reskin: "none".into(),
             // The bug-report button is hidden by default (user request);
             // everything else starts visible.
             hide_bug: true,
